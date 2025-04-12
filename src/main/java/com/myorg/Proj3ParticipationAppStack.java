@@ -4,19 +4,18 @@ import software.amazon.awscdk.CfnOutput;
 import software.amazon.awscdk.Duration;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
-import software.amazon.awscdk.services.apigateway.CorsOptions;
-import software.amazon.awscdk.services.apigateway.LambdaIntegration;
-import software.amazon.awscdk.services.apigateway.LambdaRestApi;
-import software.amazon.awscdk.services.dynamodb.Attribute;
-import software.amazon.awscdk.services.dynamodb.AttributeType;
+import software.amazon.awscdk.services.apigateway.*;
+import software.amazon.awscdk.services.dynamodb.ITable;
 import software.amazon.awscdk.services.dynamodb.Table;
 import software.amazon.awscdk.services.iam.Effect;
 import software.amazon.awscdk.services.iam.PolicyStatement;
 import software.amazon.awscdk.services.lambda.Code;
 import software.amazon.awscdk.services.lambda.Function;
 import software.amazon.awscdk.services.lambda.Runtime;
+import software.amazon.awscdk.services.s3.IBucket;
 import software.amazon.awscdk.services.s3.Bucket;
 import software.constructs.Construct;
+
 import java.util.Arrays;
 import java.util.HashMap;
 
@@ -24,18 +23,11 @@ public class Proj3ParticipationAppStack extends Stack {
     public Proj3ParticipationAppStack(final Construct scope, final String id, final StackProps props) {
         super(scope, id, props);
 
-        // S3 Bucket
-        Bucket bucket = Bucket.Builder.create(this, "Proj3ImagesBucket")
-                .bucketName("proj3-images-" + System.currentTimeMillis())
-                .versioned(false)
-                .build();
+        // Reference existing S3 Bucket as IBucket
+        IBucket bucket = Bucket.fromBucketName(this, "Group13Bucket", "group13awsbucket");
 
-        // DynamoDB Table
-        Table table = Table.Builder.create(this, "Proj3ParticipationTable")
-                .partitionKey(Attribute.builder().name("email").type(AttributeType.STRING).build())
-                .sortKey(Attribute.builder().name("date").type(AttributeType.STRING).build())
-                .tableName("proj3-participation")
-                .build();
+        // Reference existing DynamoDB Table as ITable
+        ITable table = Table.fromTableName(this, "Proj3ParticipationTable", "proj3-participation");
 
         // Lambda Function
         Function lambdaFunction = Function.Builder.create(this, "Proj3ParticipationFunction")
@@ -46,13 +38,13 @@ public class Proj3ParticipationAppStack extends Stack {
                 .timeout(Duration.seconds(60))
                 .environment(new HashMap<String, String>() {{
                     put("S3_BUCKET", bucket.getBucketName());
-                    put("NAMES_IMAGE", "name_image.jpg");
-                    put("FACES_IMAGE", "face_image.jpg");
+                    put("NAMES_IMAGE", "proj3/name_image.jpg");
+                    put("FACES_IMAGE", "proj3/face_image.jpg");
                     put("TABLE_NAME", table.getTableName());
                 }})
                 .build();
 
-        // Grant Lambda permissions
+        // Grant permissions to the Lambda function
         bucket.grantReadWrite(lambdaFunction);
         table.grantReadWriteData(lambdaFunction);
         lambdaFunction.addToRolePolicy(PolicyStatement.Builder.create()
@@ -64,21 +56,21 @@ public class Proj3ParticipationAppStack extends Stack {
                 .resources(Arrays.asList("*"))
                 .build());
 
-        // API Gateway
-        LambdaRestApi api = LambdaRestApi.Builder.create(this, "Proj3Api")
+        // API Gateway - only /process-image POST route
+        RestApi api = RestApi.Builder.create(this, "Proj3Api")
                 .restApiName("proj3-participation-api")
-                .handler(lambdaFunction)
                 .defaultCorsPreflightOptions(CorsOptions.builder()
                         .allowOrigins(Arrays.asList("*"))
                         .allowMethods(Arrays.asList("POST", "OPTIONS"))
                         .allowHeaders(Arrays.asList("Content-Type"))
                         .build())
-                .deployOptions(software.amazon.awscdk.services.apigateway.StageOptions.builder()
+                .deployOptions(StageOptions.builder()
                         .stageName("dev")
                         .build())
                 .build();
 
-        api.getRoot().addResource("process-image").addMethod("POST", LambdaIntegration.Builder.create(lambdaFunction).build());
+        Resource processImage = api.getRoot().addResource("process-image");
+        processImage.addMethod("POST", LambdaIntegration.Builder.create(lambdaFunction).build());
 
         // Output API Endpoint
         CfnOutput.Builder.create(this, "ApiEndpoint")
