@@ -1,10 +1,15 @@
 package com.myorg;
 
+import java.util.Arrays;
+import java.util.HashMap;
+
 import software.amazon.awscdk.CfnOutput;
 import software.amazon.awscdk.Duration;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
-import software.amazon.awscdk.services.apigateway.*;
+import software.amazon.awscdk.services.apigateway.CorsOptions;
+import software.amazon.awscdk.services.apigateway.LambdaRestApi;
+import software.amazon.awscdk.services.apigateway.StageOptions;
 import software.amazon.awscdk.services.dynamodb.ITable;
 import software.amazon.awscdk.services.dynamodb.Table;
 import software.amazon.awscdk.services.iam.Effect;
@@ -12,21 +17,18 @@ import software.amazon.awscdk.services.iam.PolicyStatement;
 import software.amazon.awscdk.services.lambda.Code;
 import software.amazon.awscdk.services.lambda.Function;
 import software.amazon.awscdk.services.lambda.Runtime;
-import software.amazon.awscdk.services.s3.IBucket;
 import software.amazon.awscdk.services.s3.Bucket;
+import software.amazon.awscdk.services.s3.IBucket;
 import software.constructs.Construct;
-
-import java.util.Arrays;
-import java.util.HashMap;
 
 public class Proj3ParticipationAppStack extends Stack {
     public Proj3ParticipationAppStack(final Construct scope, final String id, final StackProps props) {
         super(scope, id, props);
 
-        // Reference existing S3 Bucket as IBucket
-        IBucket bucket = Bucket.fromBucketName(this, "Group13Bucket", "group13awsbucket");
+        // S3 Bucket (using existing bucket)
+        IBucket bucket = Bucket.fromBucketName(this, "Proj3Bucket", "group13awsbucket");
 
-        // Reference existing DynamoDB Table as ITable
+        // DynamoDB Table (reference existing table)
         ITable table = Table.fromTableName(this, "Proj3ParticipationTable", "proj3-participation");
 
         // Lambda Function
@@ -38,13 +40,13 @@ public class Proj3ParticipationAppStack extends Stack {
                 .timeout(Duration.seconds(60))
                 .environment(new HashMap<String, String>() {{
                     put("S3_BUCKET", bucket.getBucketName());
-                    put("NAMES_IMAGE", "proj3/name_image.jpg");
-                    put("FACES_IMAGE", "proj3/face_image.jpg");
+                    put("NAMES_IMAGE", "proj3/names.jpg");
+                    put("FACES_IMAGE", "proj3/faces.jpg");
                     put("TABLE_NAME", table.getTableName());
                 }})
                 .build();
 
-        // Grant permissions to the Lambda function
+        // Grant permissions to Lambda
         bucket.grantReadWrite(lambdaFunction);
         table.grantReadWriteData(lambdaFunction);
         lambdaFunction.addToRolePolicy(PolicyStatement.Builder.create()
@@ -56,26 +58,26 @@ public class Proj3ParticipationAppStack extends Stack {
                 .resources(Arrays.asList("*"))
                 .build());
 
-        // API Gateway - only /process-image POST route
-        RestApi api = RestApi.Builder.create(this, "Proj3Api")
+        // API Gateway
+        LambdaRestApi api = LambdaRestApi.Builder.create(this, "Proj3Api")
                 .restApiName("proj3-participation-api")
+                .handler(lambdaFunction)
                 .defaultCorsPreflightOptions(CorsOptions.builder()
                         .allowOrigins(Arrays.asList("*"))
                         .allowMethods(Arrays.asList("POST", "OPTIONS"))
-                        .allowHeaders(Arrays.asList("Content-Type"))
+                        .allowHeaders(Arrays.asList("Content-Type", "Authorization"))
                         .build())
                 .deployOptions(StageOptions.builder()
                         .stageName("dev")
                         .build())
                 .build();
 
-        Resource processImage = api.getRoot().addResource("process-image");
-        processImage.addMethod("POST", LambdaIntegration.Builder.create(lambdaFunction).build());
-
         // Output API Endpoint
+        String apiUrl = String.format("https://%s.execute-api.%s.amazonaws.com/dev/process-image",
+                api.getRestApiId(), Stack.of(this).getRegion());
         CfnOutput.Builder.create(this, "ApiEndpoint")
                 .description("API Gateway Endpoint")
-                .value(api.getUrl() + "process-image")
+                .value(apiUrl)
                 .build();
     }
 }
