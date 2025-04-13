@@ -8,7 +8,9 @@ import software.amazon.awscdk.Duration;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.StackProps;
 import software.amazon.awscdk.services.apigateway.CorsOptions;
-import software.amazon.awscdk.services.apigateway.LambdaRestApi;
+import software.amazon.awscdk.services.apigateway.LambdaIntegration;
+import software.amazon.awscdk.services.apigateway.MethodOptions;
+import software.amazon.awscdk.services.apigateway.RestApi;
 import software.amazon.awscdk.services.apigateway.StageOptions;
 import software.amazon.awscdk.services.dynamodb.ITable;
 import software.amazon.awscdk.services.dynamodb.Table;
@@ -25,10 +27,10 @@ public class Proj3ParticipationAppStack extends Stack {
     public Proj3ParticipationAppStack(final Construct scope, final String id, final StackProps props) {
         super(scope, id, props);
 
-        // S3 Bucket (using existing bucket)
+        // S3 Bucket (existing)
         IBucket bucket = Bucket.fromBucketName(this, "Proj3Bucket", "group13awsbucket");
 
-        // DynamoDB Table (reference existing table)
+        // DynamoDB Table (existing)
         ITable table = Table.fromTableName(this, "Proj3ParticipationTable", "proj3-participation");
 
         // Lambda Function
@@ -46,38 +48,35 @@ public class Proj3ParticipationAppStack extends Stack {
                 }})
                 .build();
 
-        // Grant permissions to Lambda
+        // Permissions
         bucket.grantReadWrite(lambdaFunction);
         table.grantReadWriteData(lambdaFunction);
         lambdaFunction.addToRolePolicy(PolicyStatement.Builder.create()
                 .effect(Effect.ALLOW)
-                .actions(Arrays.asList(
-                        "rekognition:CompareFaces",
-                        "textract:DetectDocumentText"
-                ))
+                .actions(Arrays.asList("rekognition:CompareFaces", "textract:DetectDocumentText"))
                 .resources(Arrays.asList("*"))
                 .build());
 
-        // API Gateway
-        LambdaRestApi api = LambdaRestApi.Builder.create(this, "Proj3Api")
+        // API Gateway — manual route setup
+        RestApi api = RestApi.Builder.create(this, "Proj3Api")
                 .restApiName("proj3-participation-api")
-                .handler(lambdaFunction)
                 .defaultCorsPreflightOptions(CorsOptions.builder()
                         .allowOrigins(Arrays.asList("*"))
                         .allowMethods(Arrays.asList("POST", "OPTIONS"))
                         .allowHeaders(Arrays.asList("Content-Type", "Authorization"))
                         .build())
-                .deployOptions(StageOptions.builder()
-                        .stageName("dev")
-                        .build())
+                .deployOptions(StageOptions.builder().stageName("dev").build())
                 .build();
 
-        // Output API Endpoint
-        String apiUrl = String.format("https://%s.execute-api.%s.amazonaws.com/dev/process-image",
-                api.getRestApiId(), Stack.of(this).getRegion());
+        // /process-image POST
+        api.getRoot().addResource("process-image")
+                .addMethod("POST", LambdaIntegration.Builder.create(lambdaFunction).build(),
+                        MethodOptions.builder().build());
+
+        // Output clean API endpoint
         CfnOutput.Builder.create(this, "ApiEndpoint")
                 .description("API Gateway Endpoint")
-                .value(apiUrl)
+                .value(api.getUrl() + "process-image")
                 .build();
     }
 }
