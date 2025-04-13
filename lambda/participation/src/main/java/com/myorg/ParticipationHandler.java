@@ -113,7 +113,7 @@ public class ParticipationHandler implements RequestHandler<Map<String, Object>,
             CompareFacesRequest compareFacesRequest = CompareFacesRequest.builder()
                     .sourceImage(sourceImage)
                     .targetImage(targetImage)
-                    .similarityThreshold(70.0f)
+                    .similarityThreshold(85.0f)
                     .build();
             CompareFacesResponse compareFacesResponse = rekognitionClient.compareFaces(compareFacesRequest);
             faceMatch = !compareFacesResponse.faceMatches().isEmpty();
