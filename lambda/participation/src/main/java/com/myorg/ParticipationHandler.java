@@ -120,7 +120,7 @@ public class ParticipationHandler implements RequestHandler<Map<String, Object>,
             logger.info("Face match result: " + faceMatch);
 
             // Participation result
-            boolean participation = nameMatch && faceMatch;
+            boolean participation = nameMatch || faceMatch;
 
             // Store in DynamoDB
             Map<String, AttributeValue> item = new HashMap<>();
