@@ -20,5 +20,5 @@ Users submit their name, email, date, and a face image via a web form. The app:
 ## Setup
 1. **Clone**:
    ```bash
-   git clone https://github.com/Anand0213/proj3-participation-app
-   cd proj3-participation-app
+   git clone https://github.com/ramyasree-02/ParticipationApp
+   cd ParticipationApp
